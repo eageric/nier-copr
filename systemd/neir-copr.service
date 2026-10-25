@@ -1,0 +1,14 @@
+[Unit]
+Description=Update and publish COPR packages (byte0/nier)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/update-packages.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=neir-copr
+TimeoutStartSec=infinity
+UMask=0077
