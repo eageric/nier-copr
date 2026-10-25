@@ -1,6 +1,7 @@
 %global debug_package %{nil}
 %global __strip /bin/true
 %global _build_id_links none
+%global __brp_check_rpaths %{nil}
 
 Name:           localsend
 Version:        1.18.2
