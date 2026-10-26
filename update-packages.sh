@@ -27,7 +27,7 @@ print_usage() {
 
 check_dependencies() {
     local dry_run="${1}"
-    local required_cmds=("curl" "jq" "rpmbuild")
+    local required_cmds=("curl" "git" "jq" "rpmbuild")
 
     if [[ "${dry_run}" != "true" ]]; then
         required_cmds+=("copr-cli")
@@ -58,7 +58,7 @@ ensure_copr_repo() {
         --description "Desktop tools and programs repackaged for Fedora"
 }
 
-fetch_latest_version() {
+fetch_latest_github_version() {
     local github_repo="${1}"
     local api_url="https://api.github.com/repos/${github_repo}/releases/latest"
     local response
@@ -77,6 +77,64 @@ fetch_latest_version() {
 
     local version="${tag_name#v}"
     printf '%s\n' "${version}"
+}
+
+version_gt() {
+    local v1="${1}"
+    local v2="${2}"
+    local -a a1=() a2=()
+    local IFS='.'
+    read -r -a a1 <<< "${v1}"
+    read -r -a a2 <<< "${v2}"
+
+    local max_len=${#a1[@]}
+    if (( ${#a2[@]} > max_len )); then
+        max_len=${#a2[@]}
+    fi
+
+    local i n1 n2
+    for (( i = 0; i < max_len; i++ )); do
+        n1="${a1[i]:-0}"
+        n2="${a2[i]:-0}"
+        if (( 10#${n1} > 10#${n2} )); then
+            return 0
+        elif (( 10#${n1} < 10#${n2} )); then
+            return 1
+        fi
+    done
+
+    return 1
+}
+
+fetch_latest_git_tag_version() {
+    local git_repo_url="${1}"
+    local output
+
+    if ! output="$(git ls-remote --tags --refs "${git_repo_url}")"; then
+        log_error "Failed to query git tags from ${git_repo_url}"
+        return 1
+    fi
+
+    local latest_version=""
+    local line ref tag version
+    while IFS= read -r line; do
+        ref="${line#*refs/tags/}"
+        [[ "${ref}" == "${line}" ]] && continue
+        tag="${ref#v}"
+        if [[ "${tag}" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            version="${tag}"
+            if [[ -z "${latest_version}" ]] || version_gt "${version}" "${latest_version}"; then
+                latest_version="${version}"
+            fi
+        fi
+    done <<< "${output}"
+
+    if [[ -z "${latest_version}" ]]; then
+        log_error "No numeric version tags found in ${git_repo_url}"
+        return 1
+    fi
+
+    printf '%s\n' "${latest_version}"
 }
 
 read_spec_field() {
@@ -222,11 +280,12 @@ process_package() {
     fi
 
     local GITHUB_REPO=""
+    local GIT_TAG_REPO=""
     local PACKAGE_NAME=""
     source "${conf_file}"
 
-    if [[ -z "${GITHUB_REPO}" || -z "${PACKAGE_NAME}" ]]; then
-        log_error "Invalid package.conf in ${pkg_dir}: GITHUB_REPO and PACKAGE_NAME are required"
+    if [[ -z "${PACKAGE_NAME}" || ( -z "${GITHUB_REPO}" && -z "${GIT_TAG_REPO}" ) ]]; then
+        log_error "Invalid package.conf in ${pkg_dir}: PACKAGE_NAME and either GITHUB_REPO or GIT_TAG_REPO are required"
         return 1
     fi
 
@@ -236,9 +295,14 @@ process_package() {
         return 1
     fi
 
-    log_info "Checking ${PACKAGE_NAME} (${GITHUB_REPO})..."
     local latest_version
-    latest_version="$(fetch_latest_version "${GITHUB_REPO}")"
+    if [[ -n "${GITHUB_REPO}" ]]; then
+        log_info "Checking ${PACKAGE_NAME} (${GITHUB_REPO})..."
+        latest_version="$(fetch_latest_github_version "${GITHUB_REPO}")"
+    else
+        log_info "Checking ${PACKAGE_NAME} (${GIT_TAG_REPO})..."
+        latest_version="$(fetch_latest_git_tag_version "${GIT_TAG_REPO}")"
+    fi
 
     local spec_version
     spec_version="$(read_spec_field "${spec_file}" "Version")"
