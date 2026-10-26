@@ -159,12 +159,14 @@ read_spec_field() {
 read_spec_sources() {
     local spec_file="${1}"
     local version="${2}"
+    local rpm_version="${version//-/\~}"
     local line value expanded
 
     while IFS= read -r line; do
         if [[ "${line}" =~ ^Source[0-9]*:[[:space:]]*(.*)$ ]]; then
             value="${BASH_REMATCH[1]}"
-            expanded="${value//%\{version\}/${version}}"
+            expanded="${value//%\{upstream_version\}/${version}}"
+            expanded="${expanded//%\{version\}/${rpm_version}}"
             printf '%s\n' "${expanded}"
         fi
     done < "${spec_file}"
@@ -173,6 +175,7 @@ read_spec_sources() {
 update_spec_version() {
     local spec_file="${1}"
     local new_version="${2}"
+    local rpm_version="${new_version//-/\~}"
     local changelog_date
     printf -v changelog_date '%(%a %b %d %Y)T' -1
 
@@ -180,13 +183,15 @@ update_spec_version() {
     local line
 
     while IFS= read -r line || [[ -n "${line}" ]]; do
-        if [[ "${line}" =~ ^(Version:[[:space:]]*).*$ ]]; then
+        if [[ "${line}" =~ ^(%global[[:space:]]+upstream_version[[:space:]]+).*$ ]]; then
             updated_lines+=("${BASH_REMATCH[1]}${new_version}")
+        elif [[ "${line}" =~ ^(Version:[[:space:]]*).*$ ]]; then
+            updated_lines+=("${BASH_REMATCH[1]}${rpm_version}")
         elif [[ "${line}" =~ ^(Release:[[:space:]]*).*$ ]]; then
             updated_lines+=("${BASH_REMATCH[1]}1%{?dist}")
         elif [[ "${line}" == "%changelog" ]]; then
             updated_lines+=("${line}")
-            updated_lines+=("* ${changelog_date} neir-copr - ${new_version}-1")
+            updated_lines+=("* ${changelog_date} neir-copr - ${rpm_version}-1")
             updated_lines+=("- Repackage upstream release ${new_version}")
             updated_lines+=("")
         else
@@ -306,6 +311,7 @@ process_package() {
 
     local spec_version
     spec_version="$(read_spec_field "${spec_file}" "Version")"
+    local expected_rpm_version="${latest_version//-/\~}"
 
     local state_file="${state_dir}/${PACKAGE_NAME}.version"
     local published_version=""
@@ -313,8 +319,8 @@ process_package() {
         IFS= read -r published_version < "${state_file}" || true
     fi
 
-    if [[ "${spec_version}" != "${latest_version}" ]]; then
-        log_info "Updating ${PACKAGE_NAME} spec from ${spec_version} to ${latest_version}"
+    if [[ "${spec_version}" != "${expected_rpm_version}" ]]; then
+        log_info "Updating ${PACKAGE_NAME} spec from ${spec_version} to ${expected_rpm_version}"
         update_spec_version "${spec_file}" "${latest_version}"
     fi
 
