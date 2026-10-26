@@ -2,6 +2,7 @@
 %global __strip /bin/true
 %global _build_id_links none
 %global __brp_check_rpaths %{nil}
+%global __brp_python_bytecompile %{nil}
 
 Name:           umu-launcher
 Version:        1.4.4

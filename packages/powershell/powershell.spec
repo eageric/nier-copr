@@ -4,7 +4,7 @@
 %global __brp_check_rpaths %{nil}
 
 Name:           powershell
-Version:        7.6.8
+Version:        7.6.9
 Release:        1%{?dist}
 Summary:        PowerShell - Cross-platform automation and configuration tool/framework
 License:        MIT
@@ -53,5 +53,8 @@ fi
 %{_mandir}/man1/pwsh.1*
 
 %changelog
+* Sun Oct 25 2026 neir-copr - 7.6.9-1
+- Repackage upstream release 7.6.9
+
 * Sun Oct 25 2026 neir-copr - 7.6.8-1
 - Repackage upstream release 7.6.8
